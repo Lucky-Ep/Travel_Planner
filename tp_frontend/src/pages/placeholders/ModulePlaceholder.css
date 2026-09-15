@@ -1,0 +1,35 @@
+.tp-placeholder h1 {
+  margin: 8px 0 20px;
+  font-size: 26px;
+}
+
+.tp-placeholder-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--tp-primary-soft);
+  color: var(--tp-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tp-placeholder-box {
+  padding: 20px 24px;
+  background: #fff;
+  border: 1px dashed var(--tp-border);
+  border-radius: var(--tp-radius);
+}
+
+.tp-placeholder-box p {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: var(--tp-text-muted);
+}
+
+.tp-placeholder-box ul {
+  margin: 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
