@@ -17,8 +17,8 @@ public class User {
     @Column(name = "password_hash", nullable = false)
     private String passwordHash;
 
-    @Column(name = "display_name", nullable = false, length = 100)
-    private String displayName;
+    @Column(name = "name", nullable = false, length = 100)
+    private String name;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -29,10 +29,10 @@ public class User {
     public User() {
     }
 
-    public User(String email, String passwordHash, String displayName) {
+    public User(String email, String passwordHash, String name) {
         this.email = email;
         this.passwordHash = passwordHash;
-        this.displayName = displayName;
+        this.name = name;
     }
 
     @PrePersist
@@ -67,12 +67,12 @@ public class User {
         this.passwordHash = passwordHash;
     }
 
-    public String getDisplayName() {
-        return displayName;
+    public String getName() {
+        return name;
     }
 
-    public void setDisplayName(String displayName) {
-        this.displayName = displayName;
+    public void setName(String name) {
+        this.name = name;
     }
 
     public LocalDateTime getCreatedAt() {

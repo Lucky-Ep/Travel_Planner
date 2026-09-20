@@ -34,8 +34,8 @@ public class PlanItem {
     @Column(name = "visit_order", nullable = false)
     private Integer visitOrder;
 
-    @Column(name = "visit_time")
-    private LocalTime visitTime;
+    @Column(name = "scheduled_time")
+    private LocalTime scheduledTime;
 
     @Min(1)
     @Column(name = "duration_minutes")
@@ -61,7 +61,7 @@ public class PlanItem {
             TripDay tripDay,
             POI poi,
             Integer visitOrder,
-            LocalTime visitTime,
+            LocalTime scheduledTime,
             Integer durationMinutes,
             String note,
             Integer reminderMinutesBefore
@@ -69,7 +69,7 @@ public class PlanItem {
         this.tripDay = tripDay;
         this.poi = poi;
         this.visitOrder = visitOrder;
-        this.visitTime = visitTime;
+        this.scheduledTime = scheduledTime;
         this.durationMinutes = durationMinutes;
         this.note = note;
         this.reminderMinutesBefore = reminderMinutesBefore;
@@ -115,12 +115,12 @@ public class PlanItem {
         this.visitOrder = visitOrder;
     }
 
-    public LocalTime getVisitTime() {
-        return visitTime;
+    public LocalTime getScheduledTime() {
+        return scheduledTime;
     }
 
-    public void setVisitTime(LocalTime visitTime) {
-        this.visitTime = visitTime;
+    public void setScheduledTime(LocalTime scheduledTime) {
+        this.scheduledTime = scheduledTime;
     }
 
     public Integer getDurationMinutes() {

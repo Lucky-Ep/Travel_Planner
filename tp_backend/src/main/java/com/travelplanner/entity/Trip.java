@@ -17,8 +17,8 @@ public class Trip {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(nullable = false, length = 100)
-    private String title;
+    @Column(name = "name", nullable = false, length = 100)
+    private String name;
 
     @Column(nullable = false, length = 100)
     private String city;
@@ -43,14 +43,14 @@ public class Trip {
 
     public Trip(
             User user,
-            String title,
+            String name,
             String city,
             String countryCode,
             LocalDate startDate,
             LocalDate endDate
     ) {
         this.user = user;
-        this.title = title;
+        this.name = name;
         this.city = city;
         this.countryCode = countryCode;
         this.startDate = startDate;
@@ -81,12 +81,12 @@ public class Trip {
         this.user = user;
     }
 
-    public String getTitle() {
-        return title;
+    public String getName() {
+        return name;
     }
 
-    public void setTitle(String title) {
-        this.title = title;
+    public void setName(String name) {
+        this.name = name;
     }
 
     public String getCity() {

@@ -44,6 +44,9 @@ public class POI {
 
     private Double rating;
 
+    @Column(name = "image_url", length = 1000)
+    private String imageUrl;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -161,6 +164,14 @@ public class POI {
 
     public void setRating(Double rating) {
         this.rating = rating;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 
     public LocalDateTime getCreatedAt() {

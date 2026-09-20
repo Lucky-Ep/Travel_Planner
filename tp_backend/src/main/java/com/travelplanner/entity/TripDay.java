@@ -11,8 +11,8 @@ import java.time.LocalDate;
         name = "trip_days",
         uniqueConstraints = {
                 @UniqueConstraint(
-                        name = "uk_trip_day_number",
-                        columnNames = {"trip_id", "day_number"}
+                        name = "uk_trip_day_index",
+                        columnNames = {"trip_id", "day_index"}
                 )
         }
 )
@@ -26,10 +26,10 @@ public class TripDay {
     @JoinColumn(name = "trip_id", nullable = false)
     private Trip trip;
 
-    @Min(1)
-    @Max(15)
-    @Column(name = "day_number", nullable = false)
-    private Integer dayNumber;
+    @Min(0)
+    @Max(14)
+    @Column(name = "day_index", nullable = false)
+    private Integer dayIndex;
 
     @Column(nullable = false)
     private LocalDate date;
@@ -37,9 +37,9 @@ public class TripDay {
     public TripDay() {
     }
 
-    public TripDay(Trip trip, Integer dayNumber, LocalDate date) {
+    public TripDay(Trip trip, Integer dayIndex, LocalDate date) {
         this.trip = trip;
-        this.dayNumber = dayNumber;
+        this.dayIndex = dayIndex;
         this.date = date;
     }
 
@@ -55,12 +55,12 @@ public class TripDay {
         this.trip = trip;
     }
 
-    public Integer getDayNumber() {
-        return dayNumber;
+    public Integer getDayIndex() {
+        return dayIndex;
     }
 
-    public void setDayNumber(Integer dayNumber) {
-        this.dayNumber = dayNumber;
+    public void setDayIndex(Integer dayIndex) {
+        this.dayIndex = dayIndex;
     }
 
     public LocalDate getDate() {

@@ -8,7 +8,7 @@ import java.util.Optional;
 
 public interface TripDayRepository extends JpaRepository<TripDay, Long> {
 
-    List<TripDay> findByTripIdOrderByDayNumberAsc(Long tripId);
+    List<TripDay> findByTripIdOrderByDayIndexAsc(Long tripId);
 
     Optional<TripDay> findByIdAndTripId(Long dayId, Long tripId);
 
