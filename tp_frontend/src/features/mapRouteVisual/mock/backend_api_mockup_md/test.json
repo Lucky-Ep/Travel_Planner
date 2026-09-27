@@ -1,0 +1,43 @@
+{
+  "dayId" : 1,
+  "totalDistanceMeters" : 5546,
+  "totalDurationSeconds" : 1564,
+  "overviewPolyline" : "whfiHivgM{BvJiAhFgB~HoDaCaAu@MSIUcA\\_AXiBl@k@PMFMEQDUHwAd@aLrDiEtAm@Ri@KqA\\mA^SBkC}@cAYaApBsAlCCAGAE?MJI\\?PJTNFLCHOBEBBDDLLhDrAVJd@u@dA}Bd@mASyAkC}@cAYaApBsAlCCAGAMBEFI\\BZBDUn@KrAS~CeAdO?d@[rEa@zFa@nFW`Ce@zGKbBK|AB^DZ[Rs@l@iA~As@`ALlBTrFTbEJdACt@HrCH|CFhFHxA@tAJlHFzFkAfAcA`AeA`A_A~@wD~EYp@s@nBm@~AMP?AAAA?AAE?GDER@LBDHDJE@CdDjK`A|Cz@jCUh@]`AaAzCc@~Aa@zBShAIXUjA]xBXBH?TJr@ZLEtA`AP\\ZRzA~@pBpAvA|@Ip@Ir@Cz@@`A?HdAMlAI`@E",
+  "legs" : [ {
+    "fromPoiId" : 101,
+    "fromPoiName" : "Musée du Louvre (卢浮宫)",
+    "fromLocation" : {
+      "lat" : 48.8606,
+      "lng" : 2.3376
+    },
+    "toPoiId" : 102,
+    "toPoiName" : "Palais Garnier (巴黎歌剧院)",
+    "toLocation" : {
+      "lat" : 48.8719,
+      "lng" : 2.3316
+    },
+    "distanceMeters" : 1817,
+    "distanceText" : "1.8 km",
+    "durationSeconds" : 573,
+    "durationText" : "10 mins",
+    "polyline" : "whfiHivgM{@vDa@bBYpACHS|@S|@[|AENGTCLEVELADGX]`Bg@rB??yByAu@g@w@i@IKEGGKIU??cA\\i@NUHcAZe@PKB_@LMFMEQDKDIBQFUHWHWHq@Tq@TUFOFMDw@V{Ad@uBr@w@VUFWJcBh@m@RA?g@Kc@Lm@NK@aA\\I@I@??}Bu@MGYIi@O??]t@c@z@ABqAhC??AAA?AAA?A?A?A?A?A?A@A?A@A?A@?@A@A@CBADCL?D?D?B?B?B@@?@@B?@@B@@@B@@BBB@B?B@@?BAB?BA@CBC@C@CBEBB@BB@@@@@BBDDDBNFb@NnBv@??LFHBb@q@@C@CTg@"
+  }, {
+    "fromPoiId" : 102,
+    "fromPoiName" : "Palais Garnier (巴黎歌剧院)",
+    "fromLocation" : {
+      "lat" : 48.8719,
+      "lng" : 2.3316
+    },
+    "toPoiId" : 103,
+    "toPoiName" : "Arc de Triomphe (凯旋门)",
+    "toLocation" : {
+      "lat" : 48.8738,
+      "lng" : 2.295
+    },
+    "distanceMeters" : 3729,
+    "distanceText" : "3.7 km",
+    "durationSeconds" : 991,
+    "durationText" : "17 mins",
+    "polyline" : "}ehiHkhfMb@_AHQd@mA??SyA}Bu@MGYIi@O??]t@c@z@ABqAhC??AAA?AAA?A?A?A?A?A?A@A?A@A?A@?@A@A@CBADCL?D?D?B?B?B@@?@@B?@@B@@Qb@CJAFAJALEp@ATEp@CRGbAc@jGQbCG|@Gv@?d@[rEGr@YfEQ`CCVC`@Gr@Ed@E^E^EZ[tE?@?@I`AK`B?@KnA?L@P@LDZ??[RQNa@\\i@z@_@b@_@f@??SXFh@DbAFjA@RF|ABt@N`DD`@Df@D\\??Ct@HrCFlA@nA@z@@dA@d@@`AHxA@tAFtEBvABrABfD??e@`@e@d@]\\CB[VEFUPQPUTGFML[XONEFsBlCcApAIPO^Un@]~@m@~AMP???AAAA??AA?A?A?A?A?A@A??@A??@A@?@ADA??@?@?@?@?@?D?B@??@?@@@?@@??@@@@??@@?@??@@?@??A@?@?@A@??A@??A@??A~@vChApDZ`AVx@h@bBz@jC??Uh@Up@GNe@zA[~@IVMb@CLGTEREVKh@Id@ShAIXGRMv@Kp@QfA??RBD?B?D?B@PHRJNHHBD@@AJCb@Zp@d@P\\ZRt@d@d@Xl@`@n@`@LFDDj@^j@\\??AHGf@E\\CTA^AZ?\\@b@?H??dAML?~@I`@E"
+  } ]
+}
