@@ -1,70 +1,119 @@
-# Getting Started with Create React App
+# Travel Planner — Frontend
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+## 快速开始
 
-## Available Scripts
+```bash
+cp .env.example .env.development   # .env.* 不入库，clone 下来要先复制一份
+npm install
+npm start        # http://localhost:3000
+npm test         # 认证、异常恢复及 Trip 入口测试
+npm run build
+```
 
-In the project directory, you can run:
+`.env.development` 里 `REACT_APP_USE_MOCK=true`，不需要后端就能完整跑通注册 / 登录 / 登出 / 主页 / Trip 列表。
 
-### `npm start`
+演示账号：`demo@travelplanner.com` / `demo1234`
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+真实联调前先与模块 6 确认下方接口契约，再把 `REACT_APP_USE_MOCK` 改成 `false` 并重启开发服务器。若路径或响应结构不同，需在 `src/api/` 中适配。
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+注意 `useMock` 默认是 `false`。`npm run build` 不读 `.env.development`，默认开着会把 mock 打进生产包。测试环境的开关在 `.env.test`，那个文件要入库，删了测试会全挂。
 
-### `npm test`
+---
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+## 模块 1：App Framework + User/Auth
 
-### `npm run build`
+### 已完成
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+| 交付物 | 位置 |
+|---|---|
+| App 主框架 / 路由表 | `src/App.js` |
+| 页面导航 | `src/components/NavBar.js`、`src/components/AppLayout.js` |
+| 注册 / 登录 / 登出 | `src/pages/RegisterPage.js`、`src/pages/LoginPage.js`、`NavBar` |
+| 登录状态 | `src/auth/AuthContext.js`、`src/auth/tokenStorage.js` |
+| 路由守卫 | `src/auth/ProtectedRoute.js`、`src/auth/PublicOnlyRoute.js` |
+| 用户主页 | `src/pages/HomePage.js` |
+| Trip 列表入口 | `src/pages/TripListPage.js` |
+| HTTP 层 + 401 统一处理 | `src/api/client.js` |
+| Design tokens | `src/index.css`（**其他模块请用 CSS 变量，不要硬编码颜色**） |
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### 登录态设计
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- 注册 / 登录成功后后端返回 `{ token, user }`，token 存 `localStorage`
+- 每个请求由 axios 拦截器自动加 `Authorization: Bearer <token>`
+- 冷启动时用 token 调 `GET /api/auth/me` 恢复用户信息；401 清凭证，网络异常、超时或其他非 401 错误进入恢复失败页，保留 token 并支持重试
+- 恢复期间及恢复失败时均不挂载受保护页面；登录页和注册页也使用相同的恢复失败入口
+- 任意请求返回 401 → 清凭证 + 广播 `tp:unauthorized` → `AuthContext` 退出登录态 → 守卫跳 `/login`
+- 被弹回登录页时原地址记在 `location.state.from`，登录成功后由 `PublicOnlyRoute` 统一恢复 pathname、search 和 hash，避免页面与守卫同时导航
 
-### `npm run eject`
+> 如果团队改用 Session + HttpOnly Cookie，需要同时调整启动时的凭证探测、认证响应、请求凭证配置及后端 CORS/CSRF 设置，并重新验证登录、过期和登出流程。
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+Windows 操作、验收方法和跨模块接口待确认项见 [功能组 1 接入与验收说明](../docs/module-1-handoff.md)。
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+---
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Auth API 契约（草案，待模块 6 确认）
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+```
+POST /api/auth/register   { email, password, displayName }  -> 201 { token, user }
+POST /api/auth/login      { email, password }               -> 200 { token, user }
+POST /api/auth/logout                                       -> 204
+GET  /api/auth/me                                           -> 200 { user }
+GET  /api/trips                                             -> 200 { trips: [...] }
 
-## Learn More
+user  = { id, email, displayName, createdAt }
+错误体 = { message: string }
+错误码  400 参数不合法 / 401 未认证或密码错 / 409 邮箱已注册
+```
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+后端待办（模块 6 / 后端统筹）：
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+- [ ] `spring-boot-starter-security` + BCrypt + JWT 依赖还没加
+- [ ] CORS 需放行 `http://localhost:3000`，否则前端本地调不通
+- [ ] `User` entity 已有 `passwordHash`，缺 `AuthController` / `AuthService`
 
-### Code Splitting
+---
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+## 给模块 2 / 3 / 4 的挂载点
 
-### Analyzing the Bundle Size
+路由已经接通，登录态、导航、布局都是现成的，把占位组件换成自己的页面即可：
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+| 路由 | 当前占位 | 归属 |
+|---|---|---|
+| `/explore` | `pages/placeholders/ExplorePage.js` | 模块 2 POI Management |
+| `/trips/new`、`/trips/:tripId` | `pages/placeholders/TripDetailPage.js` | 模块 3 Trip Planning + 模块 4 Map |
 
-### Making a Progressive Web App
+加新页面只要在 `src/App.js` 受保护的那段里加一行 `<Route>`。
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+拿当前用户：
 
-### Advanced Configuration
+```js
+import { useAuth } from '../auth/AuthContext';
+const { user, isAuthenticated, logout } = useAuth();
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
+发请求（自动带 token、自动处理 401）：
 
-### Deployment
+```js
+import client from '../api/client';
+const { data } = await client.get('/trips/123');
+```
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
+---
 
-### `npm run build` fails to minify
+## 目录结构
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+```
+src/
+├── api/
+│   ├── client.js        axios 实例 + 拦截器
+│   ├── auth.js          Auth API
+│   ├── trips.js         Trip 只读接口（完整 CRUD 归模块 3/6）
+│   └── mock/            后端 ready 后整个目录可删
+├── auth/                AuthContext / 路由守卫 / token 存储
+├── components/          NavBar / AppLayout / FullPageSpinner
+├── pages/               Login / Register / Home / TripList / 404
+│   └── placeholders/    模块 2/3/4 的占位页
+├── utils/date.js        日期格式化（避开 LocalDate 的时区坑）
+├── config.js
+└── index.css            design tokens + 通用组件样式
+```
