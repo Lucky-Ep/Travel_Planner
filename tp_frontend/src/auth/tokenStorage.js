@@ -1,9 +1,8 @@
 /**
  * 登录凭证的存储（模块 1 - User/Auth）
  *
- * 目前方案：JWT 存 localStorage，请求带 Authorization: Bearer <token>。
- * 如果最终和后端对齐成 Session + HttpOnly Cookie，只需要把这个文件改成空实现、
- * 并给 axios 打开 withCredentials，其余代码不受影响。
+ * 当前将 Bearer token 存 localStorage；真实 token 的格式待后端确认。
+ * 若改为 HttpOnly Cookie，需同步调整 AuthContext 的启动探测和请求凭证配置。
  */
 const TOKEN_KEY = 'tp.auth.token';
 

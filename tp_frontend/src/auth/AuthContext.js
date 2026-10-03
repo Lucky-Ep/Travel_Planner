@@ -10,13 +10,15 @@ const STATUS = {
   LOADING: 'loading',
   AUTHENTICATED: 'authenticated',
   ANONYMOUS: 'anonymous',
+  RECOVERY_ERROR: 'recovery-error',
 };
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [status, setStatus] = useState(STATUS.LOADING);
+  const [recoveryAttempt, setRecoveryAttempt] = useState(0);
 
-  // 冷启动：有 token 就去换用户信息，换不到说明过期了
+  // 冷启动和手动重试：暂时无法访问服务不等于凭证失效。
   useEffect(() => {
     // 同步判断，没有 token 就不进异步分支，避免多渲染一帧 loading
     if (!getToken()) {
@@ -32,11 +34,15 @@ export function AuthProvider({ children }) {
         if (cancelled) return;
         setUser(me);
         setStatus(STATUS.AUTHENTICATED);
-      } catch {
+      } catch (error) {
         if (cancelled) return;
-        clearToken();
         setUser(null);
-        setStatus(STATUS.ANONYMOUS);
+        if (error?.response?.status === 401 || !getToken()) {
+          clearToken();
+          setStatus(STATUS.ANONYMOUS);
+        } else {
+          setStatus(STATUS.RECOVERY_ERROR);
+        }
       }
     }
 
@@ -44,6 +50,11 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
+  }, [recoveryAttempt]);
+
+  const retryRecovery = useCallback(() => {
+    setStatus(STATUS.LOADING);
+    setRecoveryAttempt((attempt) => attempt + 1);
   }, []);
 
   // 任意请求返回 401 时，统一退出登录态
@@ -89,11 +100,13 @@ export function AuthProvider({ children }) {
       status,
       isAuthenticated: status === STATUS.AUTHENTICATED,
       isLoading: status === STATUS.LOADING,
+      recoveryFailed: status === STATUS.RECOVERY_ERROR,
+      retryRecovery,
       login,
       register,
       logout,
     }),
-    [user, status, login, register, logout]
+    [user, status, retryRecovery, login, register, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

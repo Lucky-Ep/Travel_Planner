@@ -1,19 +1,14 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import './AuthPage.css';
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
 
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
-
-  // 被 ProtectedRoute 弹回来时记下的原地址，登录成功后跳回去
-  const redirectTo = location.state?.from?.pathname || '/';
 
   function update(field) {
     return (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }));
@@ -25,7 +20,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(form);
-      navigate(redirectTo, { replace: true });
+      // PublicOnlyRoute 根据原地址完成跳转（包括 query 和 hash）。
     } catch (err) {
       setError(err.message);
       setSubmitting(false);

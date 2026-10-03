@@ -6,7 +6,7 @@
 cp .env.example .env.development   # .env.* 不入库，clone 下来要先复制一份
 npm install
 npm start        # http://localhost:3000
-npm test         # 8 个 auth flow 测试
+npm test         # 认证、异常恢复及 Trip 入口测试
 npm run build
 ```
 
@@ -14,7 +14,7 @@ npm run build
 
 演示账号：`demo@travelplanner.com` / `demo1234`
 
-后端 `/api/auth/*` 上线后，把 `REACT_APP_USE_MOCK` 改成 `false` 即可，业务代码不用动。
+真实联调前先与模块 6 确认下方接口契约，再把 `REACT_APP_USE_MOCK` 改成 `false` 并重启开发服务器。若路径或响应结构不同，需在 `src/api/` 中适配。
 
 注意 `useMock` 默认是 `false`。`npm run build` 不读 `.env.development`，默认开着会把 mock 打进生产包。测试环境的开关在 `.env.test`，那个文件要入库，删了测试会全挂。
 
@@ -40,11 +40,14 @@ npm run build
 
 - 注册 / 登录成功后后端返回 `{ token, user }`，token 存 `localStorage`
 - 每个请求由 axios 拦截器自动加 `Authorization: Bearer <token>`
-- 冷启动时用 token 调 `GET /api/auth/me` 恢复用户信息，失败就清凭证退回匿名态
+- 冷启动时用 token 调 `GET /api/auth/me` 恢复用户信息；401 清凭证，网络异常、超时或其他非 401 错误进入恢复失败页，保留 token 并支持重试
+- 恢复期间及恢复失败时均不挂载受保护页面；登录页和注册页也使用相同的恢复失败入口
 - 任意请求返回 401 → 清凭证 + 广播 `tp:unauthorized` → `AuthContext` 退出登录态 → 守卫跳 `/login`
-- 被弹回登录页时原地址记在 `location.state.from`，登录后跳回去（deep link 不丢）
+- 被弹回登录页时原地址记在 `location.state.from`，登录成功后由 `PublicOnlyRoute` 统一恢复 pathname、search 和 hash，避免页面与守卫同时导航
 
-> 如果最终和后端定成 **Session + HttpOnly Cookie**，只需要改 `tokenStorage.js`（改成空实现）+ 给 axios 打开 `withCredentials`，其余代码不受影响。
+> 如果团队改用 Session + HttpOnly Cookie，需要同时调整启动时的凭证探测、认证响应、请求凭证配置及后端 CORS/CSRF 设置，并重新验证登录、过期和登出流程。
+
+Windows 操作、验收方法和跨模块接口待确认项见 [功能组 1 接入与验收说明](../docs/module-1-handoff.md)。
 
 ---
 
