@@ -8,6 +8,7 @@ import com.travelplanner.entity.PlanItem;
 import com.travelplanner.repository.PlanItemRepository;
 import com.travelplanner.repository.TripDayRepository;
 import com.travelplanner.service.RoutePlanningServiceImpl;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.http.ResponseEntity;
@@ -22,9 +23,7 @@ import static org.mockito.Mockito.when;
 
 public class RoutePlanningTest {
 
-    // 从 application.properties 中读取的真实 Google Maps API Key
-    private static final String REAL_API_KEY = "AIzaSyCfq0zYkSe179lm9LGaM6Z3oakK5K-TMAw";
-
+    @Disabled("Calls live Google Directions and may incur costs; run main() manually with GOOGLE_MAPS_API_KEY.")
     @Test
     public void testRealBackendApiCall() throws Exception {
         runRealBackendTest();
@@ -35,6 +34,11 @@ public class RoutePlanningTest {
     }
 
     public void runRealBackendTest() throws Exception {
+        String apiKey = System.getenv("GOOGLE_MAPS_API_KEY");
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException(
+                    "Set GOOGLE_MAPS_API_KEY before manually running the live Google test.");
+        }
         System.out.println("==========================================================================");
         System.out.println("【1. 准备后端数据库数据（3个真实巴黎景点）】");
         System.out.println("==========================================================================");
@@ -83,7 +87,7 @@ public class RoutePlanningTest {
         // 3. 实例化你真实的后端业务服务（RoutePlanningServiceImpl）
         RoutePlanningServiceImpl routePlanningService = new RoutePlanningServiceImpl(mockPlanItemRepo, mockTripDayRepo);
         // 注入真实的 Google Maps API Key
-        ReflectionTestUtils.setField(routePlanningService, "apiKey", REAL_API_KEY);
+        ReflectionTestUtils.setField(routePlanningService, "apiKey", apiKey);
 
         // 4. 实例化你真实的控制器（RouteController）
         RouteController routeController = new RouteController(routePlanningService);
