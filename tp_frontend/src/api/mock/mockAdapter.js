@@ -121,5 +121,114 @@ export default async function mockAdapter(config) {
     return ok(config, 200, { trips: db.trips.filter((t) => t.userId === user.id) });
   }
 
+  if (method === 'get' && path === '/trips/options') {
+    const user = currentUser(config, db);
+    if (!user) throw fail(config, 401, '登录已过期，请重新登录');
+    const trips = db.trips.filter((trip) => trip.userId === user.id);
+    const tripIds = new Set(trips.map((trip) => String(trip.id)));
+    const days = db.days.filter((day) => tripIds.has(String(day.tripId)));
+    return ok(config, 200, { trips, days });
+  }
+
+  const tripDetailMatch = path.match(/^\/trips\/([^/]+)$/);
+  if (method === 'get' && tripDetailMatch) {
+    const user = currentUser(config, db);
+    if (!user) throw fail(config, 401, '登录已过期，请重新登录');
+    const tripId = decodeURIComponent(tripDetailMatch[1]);
+    const trip = db.trips.find(
+      (item) => item.userId === user.id && String(item.id) === tripId,
+    );
+    if (!trip) throw fail(config, 404, '未找到该行程');
+
+    const days = db.days
+      .filter((day) => String(day.tripId) === String(trip.id))
+      .sort((left, right) => left.dayIndex - right.dayIndex);
+    const dayIds = new Set(days.map((day) => String(day.id)));
+    const planItems = db.planItems
+      .filter((item) => dayIds.has(String(item.dayId)))
+      .sort((left, right) => left.order - right.order);
+
+    return ok(config, 200, { trip, days, planItems });
+  }
+
+  if (method === 'post' && path === '/plan-items/bulk') {
+    const user = currentUser(config, db);
+    if (!user) throw fail(config, 401, '登录已过期，请重新登录');
+
+    const poiIds = Array.isArray(body.poiIds) ? body.poiIds : [];
+    if (!body.tripId || !body.dayId || !body.tripName || !body.dayName) {
+      throw fail(config, 400, 'Trip、Day 信息不完整');
+    }
+    if (!poiIds.length) throw fail(config, 400, '请选择至少一个 POI');
+
+    let trip = db.trips.find(
+      (item) =>
+        item.userId === user.id && String(item.id) === String(body.tripId),
+    );
+    if (!trip) {
+      const today = new Date().toISOString().slice(0, 10);
+      trip = {
+        id: body.tripId,
+        userId: user.id,
+        name: body.tripName,
+        city: body.city || 'Shanghai',
+        startDate: today,
+        endDate: today,
+        dayCount: 0,
+      };
+      db.trips.push(trip);
+    }
+
+    let day = db.days.find(
+      (item) =>
+        String(item.id) === String(body.dayId) &&
+        String(item.tripId) === String(trip.id),
+    );
+    if (!day) {
+      const tripDays = db.days.filter(
+        (item) => String(item.tripId) === String(trip.id),
+      );
+      day = {
+        id: body.dayId,
+        tripId: trip.id,
+        name: body.dayName,
+        date: trip.startDate,
+        dayIndex: tripDays.length + 1,
+      };
+      db.days.push(day);
+      trip.dayCount = tripDays.length + 1;
+    }
+
+    const existingKeys = new Set(
+      db.planItems.map((item) => `${item.dayId}:${item.poiId}`),
+    );
+    let nextOrder =
+      db.planItems.reduce(
+        (highest, item) =>
+          String(item.dayId) === String(day.id)
+            ? Math.max(highest, item.order)
+            : highest,
+        0,
+      ) + 1;
+    let addedCount = 0;
+
+    poiIds.forEach((poiId) => {
+      const key = `${day.id}:${poiId}`;
+      if (existingKeys.has(key)) return;
+      db.planItems.push({
+        id: `plan-${day.id}-${poiId}`,
+        tripId: trip.id,
+        dayId: day.id,
+        poiId,
+        order: nextOrder++,
+      });
+      existingKeys.add(key);
+      addedCount += 1;
+    });
+
+    mockDb.write(db);
+    return ok(config, 201, { trip, day, addedCount });
+  }
+
   throw fail(config, 404, `Mock 未实现的接口：${method.toUpperCase()} ${path}`);
 }

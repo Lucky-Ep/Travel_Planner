@@ -11,3 +11,21 @@ export async function listTrips() {
   const { data } = await client.get('/trips');
   return data.trips ?? [];
 }
+
+export async function listTripOptions() {
+  const { data } = await client.get('/trips/options');
+  return {
+    trips: data.trips ?? [],
+    days: data.days ?? [],
+  };
+}
+
+export async function getTripDetail(tripId) {
+  const { data } = await client.get(`/trips/${encodeURIComponent(tripId)}`);
+  return data;
+}
+
+export async function addPlanItems(payload) {
+  const { data } = await client.post('/plan-items/bulk', payload);
+  return data;
+}

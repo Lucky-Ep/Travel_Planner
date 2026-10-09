@@ -9,8 +9,8 @@ import RegisterPage from './pages/RegisterPage';
 import HomePage from './pages/HomePage';
 import TripListPage from './pages/TripListPage';
 import NotFoundPage from './pages/NotFoundPage';
-import ExplorePage from './pages/placeholders/ExplorePage';
-import TripDetailPage from './pages/placeholders/TripDetailPage';
+import ExplorePage from './pages/ExplorePage';
+import TripDetailPage from './pages/TripDetailPage';
 
 /**
  * 全局路由表（模块 1）。
@@ -23,7 +23,9 @@ import TripDetailPage from './pages/placeholders/TripDetailPage';
  */
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter
+      future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+    >
       <AuthProvider>
         <Routes>
           <Route element={<PublicOnlyRoute />}>

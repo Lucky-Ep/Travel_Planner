@@ -34,7 +34,49 @@ const seed = {
       endDate: '2026-11-16',
       dayCount: 3,
     },
+    {
+      id: 'trip-shanghai-weekend',
+      userId: 1,
+      name: 'Shanghai Weekend',
+      city: 'Shanghai',
+      startDate: '2026-10-18',
+      endDate: '2026-10-19',
+      dayCount: 2,
+    },
+    {
+      id: 'trip-shanghai-five-days',
+      userId: 1,
+      name: 'Shanghai Five-Day Trip',
+      city: 'Shanghai',
+      startDate: '2026-11-03',
+      endDate: '2026-11-07',
+      dayCount: 5,
+    },
   ],
+  days: [
+    { id: '101-day-1', tripId: 101, date: '2026-10-01', dayIndex: 1 },
+    { id: '101-day-2', tripId: 101, date: '2026-10-02', dayIndex: 2 },
+    { id: '102-day-1', tripId: 102, date: '2026-11-14', dayIndex: 1 },
+    {
+      id: 'weekend-day-1',
+      tripId: 'trip-shanghai-weekend',
+      date: '2026-10-18',
+      dayIndex: 1,
+    },
+    {
+      id: 'weekend-day-2',
+      tripId: 'trip-shanghai-weekend',
+      date: '2026-10-19',
+      dayIndex: 2,
+    },
+    ...Array.from({ length: 5 }, (_, index) => ({
+      id: `five-day-${index + 1}`,
+      tripId: 'trip-shanghai-five-days',
+      date: `2026-11-0${index + 3}`,
+      dayIndex: index + 1,
+    })),
+  ],
+  planItems: [],
   sessions: {}, // token -> userId
   nextUserId: 2,
   nextTripId: 103,
@@ -43,7 +85,27 @@ const seed = {
 function read() {
   try {
     const raw = window.localStorage.getItem(DB_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const db = JSON.parse(raw);
+      const seedCopy = JSON.parse(JSON.stringify(seed));
+
+      db.days = Array.isArray(db.days) ? db.days : seedCopy.days;
+      db.planItems = Array.isArray(db.planItems) ? db.planItems : [];
+
+      seedCopy.trips.forEach((trip) => {
+        if (!db.trips.some((item) => String(item.id) === String(trip.id))) {
+          db.trips.push(trip);
+        }
+      });
+      seedCopy.days.forEach((day) => {
+        if (!db.days.some((item) => String(item.id) === String(day.id))) {
+          db.days.push(day);
+        }
+      });
+
+      write(db);
+      return db;
+    }
   } catch {
     /* ignore */
   }

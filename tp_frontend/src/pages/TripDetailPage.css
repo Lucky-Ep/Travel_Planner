@@ -1,0 +1,178 @@
+.tp-trip-detail {
+  display: grid;
+  gap: 22px;
+}
+
+.tp-trip-back {
+  width: fit-content;
+  color: var(--tp-primary);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.tp-trip-detail-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px;
+  border: 1px solid var(--tp-border);
+  border-radius: var(--tp-radius-lg);
+  background: #fff;
+  box-shadow: var(--tp-shadow);
+}
+
+.tp-trip-detail-header > div:first-child > span,
+.tp-trip-day > header span {
+  color: var(--tp-primary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+}
+
+.tp-trip-detail-header h1 {
+  margin: 7px 0 5px;
+  font-size: 32px;
+}
+
+.tp-trip-detail-header p {
+  margin: 0;
+  color: var(--tp-text-muted);
+  font-size: 13px;
+}
+
+.tp-trip-summary {
+  display: grid;
+  justify-items: end;
+}
+
+.tp-trip-summary strong {
+  color: var(--tp-primary);
+  font-size: 30px;
+}
+
+.tp-trip-summary span {
+  color: var(--tp-text-muted);
+  font-size: 11px;
+}
+
+.tp-trip-days-list {
+  display: grid;
+  gap: 16px;
+}
+
+.tp-trip-day {
+  overflow: hidden;
+  border: 1px solid var(--tp-border);
+  border-radius: var(--tp-radius-lg);
+  background: #fff;
+}
+
+.tp-trip-day > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--tp-border);
+}
+
+.tp-trip-day > header h2 {
+  margin: 3px 0 0;
+  font-size: 18px;
+}
+
+.tp-trip-day > header > strong {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tp-primary-soft);
+  color: var(--tp-primary);
+}
+
+.tp-plan-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tp-plan-items li {
+  display: grid;
+  grid-template-columns: 28px 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #edf0f2;
+}
+
+.tp-plan-items li:last-child {
+  border-bottom: 0;
+}
+
+.tp-plan-order {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tp-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tp-plan-items img {
+  width: 72px;
+  height: 58px;
+  object-fit: cover;
+  border-radius: 9px;
+}
+
+.tp-plan-items h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.tp-plan-items small,
+.tp-plan-items p {
+  color: var(--tp-text-muted);
+  font-size: 10px;
+}
+
+.tp-plan-items p {
+  margin: 5px 0 0;
+}
+
+.tp-plan-items li > strong {
+  color: #b56800;
+  font-size: 12px;
+}
+
+.tp-day-empty {
+  margin: 0;
+  padding: 26px 20px;
+  color: var(--tp-text-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 640px) {
+  .tp-trip-detail-header {
+    align-items: flex-start;
+  }
+
+  .tp-plan-items li {
+    grid-template-columns: 26px 58px minmax(0, 1fr);
+  }
+
+  .tp-plan-items img {
+    width: 58px;
+    height: 52px;
+  }
+
+  .tp-plan-items li > strong {
+    display: none;
+  }
+}

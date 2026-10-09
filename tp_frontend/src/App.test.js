@@ -1,7 +1,21 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 import { mockDb } from './api/mock/mockDb';
+
+jest.mock('./features/mapRouteVisual/components/SearchMapView', () =>
+  function SearchMapViewMock({ pois, selectedPoiIds }) {
+    return (
+      <div aria-label="POI search results map">
+        {pois.length} markers · {selectedPoiIds.length} selected
+      </div>
+    );
+  }
+);
+
+jest.mock('./features/poi/photoService', () => ({
+  getPoiPhoto: () => new Promise(() => {}),
+}));
 
 const DEMO = { email: 'demo@travelplanner.com', password: 'demo1234' };
 
@@ -33,6 +47,69 @@ test('登录成功后进入用户主页并显示 Trip 列表入口', async () =>
   expect(await screen.findByRole('heading', { name: 'Demo User' })).toBeInTheDocument();
   // 导航栏和主页卡片各有一个 Trip 列表入口
   expect(screen.getAllByRole('link', { name: /My Trips/ })).toHaveLength(2);
+});
+
+test('登录后可以打开带地图的 POI 搜索页面', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+
+  await signIn(user);
+  await screen.findByRole('heading', { name: 'Demo User' });
+  await user.click(screen.getByRole('link', { name: '发现 POI' }));
+
+  expect(
+    await screen.findByRole('heading', { name: 'Places to explore' })
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText('Search POIs')).toBeInTheDocument();
+  expect(screen.getByLabelText('POI search results map')).toHaveTextContent(
+    '8 markers'
+  );
+
+  await user.click(
+    screen.getByRole('button', { name: 'View details for Shanghai Museum' })
+  );
+
+  expect(
+    screen.getByRole('heading', { name: 'Shanghai Museum', level: 1 })
+  ).toBeInTheDocument();
+  expect(screen.getByLabelText('POI search results map')).toHaveTextContent(
+    '1 markers'
+  );
+
+  await user.click(screen.getByRole('button', { name: '+ Select POI' }));
+
+  const selectedPanel = screen.getByRole('region', { name: 'Selected POIs' });
+  expect(
+    within(selectedPanel).getByRole('button', {
+      name: 'Show Shanghai Museum details',
+    })
+  ).toBeInTheDocument();
+  expect(
+    within(selectedPanel).getByRole('button', { name: 'Add 1 to Trip' })
+  ).toBeInTheDocument();
+
+  await user.click(
+    within(selectedPanel).getByRole('button', { name: 'Add 1 to Trip' })
+  );
+  await user.clear(screen.getByLabelText('Trip'));
+  await user.type(screen.getByLabelText('Trip'), 'My Shanghai Trip');
+  await user.clear(screen.getByLabelText('Day'));
+  await user.type(screen.getByLabelText('Day'), 'Free afternoon');
+  await user.click(screen.getByRole('button', { name: 'Add 1 POI' }));
+
+  expect(await screen.findByRole('status')).toHaveTextContent(
+    'My Shanghai Trip / Free afternoon'
+  );
+
+  await user.click(screen.getByRole('link', { name: 'View in My Trips' }));
+
+  expect(
+    await screen.findByRole('heading', { name: 'My Shanghai Trip', level: 1 })
+  ).toBeInTheDocument();
+  expect(screen.getByText('Free afternoon')).toBeInTheDocument();
+  expect(
+    screen.getByRole('heading', { name: 'Shanghai Museum', level: 3 })
+  ).toBeInTheDocument();
 });
 
 test('密码错误时展示错误提示且停留在登录页', async () => {
