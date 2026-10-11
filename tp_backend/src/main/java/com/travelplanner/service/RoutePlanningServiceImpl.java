@@ -1,7 +1,5 @@
 package com.travelplanner.service;
 
-import com.google.maps.internal.PolylineEncoding;
-import com.google.maps.model.LatLng;
 import com.travelplanner.dto.route.LocationDto;
 import com.travelplanner.dto.route.RouteLegDto;
 import com.travelplanner.dto.route.RouteResponseDto;
@@ -12,18 +10,41 @@ import com.travelplanner.repository.PlanItemRepository;
 import com.travelplanner.repository.TripDayRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
+/**
+ * 路线规划服务：调用 Google Routes API (computeRoutes)。
+ * 注：旧版 Directions API 已被 Google 归为 Legacy，新建项目无法启用，因此迁移至 Routes API。
+ * 对外返回的 RouteResponseDto 结构保持不变，前端 MapLibre 无需改动。
+ */
 @Slf4j
 @Service
 public class RoutePlanningServiceImpl implements RoutePlanningService {
+
+    private static final String ROUTES_API_URL =
+            "https://routes.googleapis.com/directions/v2:computeRoutes";
+
+
+    private static final String FIELD_MASK = String.join(",",
+            "routes.distanceMeters",
+            "routes.duration",
+            "routes.polyline.encodedPolyline",
+            "routes.legs.distanceMeters",
+            "routes.legs.duration",
+            "routes.legs.polyline.encodedPolyline",
+            "routes.legs.localizedValues"
+    );
 
     private final PlanItemRepository planItemRepository;
     private final TripDayRepository tripDayRepository;
@@ -46,7 +67,6 @@ public class RoutePlanningServiceImpl implements RoutePlanningService {
         List<PlanItem> plans =
                 planItemRepository.findByTripDayIdOrderByVisitOrderAsc(dayId);
 
-        // 优化点 4：过滤掉 null 或缺少经纬度的 POI，避免拼接 "null,null" 导致 Google API 报 INVALID_REQUEST
         List<POI> pois = new ArrayList<>();
         for (PlanItem plan : plans) {
             POI poi = plan.getPoi();
@@ -58,49 +78,40 @@ public class RoutePlanningServiceImpl implements RoutePlanningService {
             }
         }
 
-        // 优化点 2：少于 2 个点时，返回结构完整且语义友好的空路线（包含 dayId，legs 为空列表，避免前端 TypeError）
+        // 少于 2 个点时，返回结构完整且语义友好的空路线（包含 dayId，legs 为空列表，避免前端 TypeError）
         if (pois.size() <= 1) {
             return createEmptyRouteResponse(dayId);
         }
 
-        POI originPoi = pois.get(0);
-        String origin = originPoi.getLatitude() + "," + originPoi.getLongitude();
-        POI destinationPoi = pois.get(pois.size() - 1);
-        String destination = destinationPoi.getLatitude() + "," + destinationPoi.getLongitude();
-        List<String> waypointCoords = new ArrayList<>();
-        for (int i = 1; i < pois.size() - 1; i++) {
-            POI midPoi = pois.get(i);
-            waypointCoords.add(midPoi.getLatitude() + "," + midPoi.getLongitude());
-        }
-        String waypoints = String.join("|", waypointCoords);
-        StringBuilder urlBuilder = new StringBuilder("https://maps.googleapis.com/maps/api/directions/json?");
-        urlBuilder.append("origin=").append(origin);
-        urlBuilder.append("&destination=").append(destination);
-        if (!waypoints.isEmpty()) {
-            urlBuilder.append("&waypoints=").append(waypoints);
-        }
-        urlBuilder.append("&mode=driving");
-        urlBuilder.append("&key=").append(apiKey);
-        String googleUrl = urlBuilder.toString();
+        // 1. 构建 Routes API 请求体
+        Map<String, Object> requestBody = buildRequestBody(pois);
 
-        // 优化点 5：复用单例 restClient，不再每次请求都重复创建
-        String responseJsonString = restClient.get()
-                .uri(googleUrl)
-                .retrieve()
-                .body(String.class);
-
+        // 2. 调用 Routes API（POST + 请求头传 Key 和 FieldMask）
+        String responseJsonString;
         try {
-            // 优化点 5：复用单例 objectMapper
+            responseJsonString = restClient.post()
+                    .uri(ROUTES_API_URL)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("X-Goog-Api-Key", apiKey)
+                    .header("X-Goog-FieldMask", FIELD_MASK)
+                    .body(objectMapper.writeValueAsString(requestBody))
+                    .retrieve()
+                    .body(String.class);
+        } catch (RestClientResponseException e) {
+            // Routes API 出错时返回 HTTP 4xx/5xx，错误详情在响应体的 error.message 中
+            log.warn("Google Routes API 请求失败. dayId={}, httpStatus={}, errorBody={}",
+                    dayId, e.getStatusCode(), e.getResponseBodyAsString());
+            return createEmptyRouteResponse(dayId);
+        }
+
+        // 3. 解析响应
+        try {
             JsonNode root = objectMapper.readTree(responseJsonString);
-
             JsonNode routes = root.get("routes");
-            String status = root.has("status") ? root.get("status").asText() : "UNKNOWN";
 
-            // 优化点 3：Google 返回空或异常状态时，记录详细警告日志，便于排查（比如 API 额度超限、Key 失效、两地无路连接等）
+            // 两点之间无可行路线时，Routes API 返回空对象 {}
             if (routes == null || routes.isEmpty()) {
-                String errorMessage = root.has("error_message") ? root.get("error_message").asText() : "No routes returned";
-                log.warn("Google Directions API 未返回有效路线. dayId={}, status={}, errorMessage={}",
-                        dayId, status, errorMessage);
+                log.warn("Google Routes API 未返回有效路线. dayId={}, response={}", dayId, responseJsonString);
                 return createEmptyRouteResponse(dayId);
             }
 
@@ -108,13 +119,10 @@ public class RoutePlanningServiceImpl implements RoutePlanningService {
             JsonNode firstRoute = routes.get(0);
 
             // 整条路线的 polyline
-            String overviewPolyline = firstRoute
-                    .get("overview_polyline")
-                    .get("points")
-                    .asText();
+            String overviewPolyline = firstRoute.path("polyline").path("encodedPolyline").asText("");
 
             // Google 返回的所有 leg
-            JsonNode legsJson = firstRoute.get("legs");
+            JsonNode legsJson = firstRoute.path("legs");
 
             List<RouteLegDto> legs = new ArrayList<>();
 
@@ -129,61 +137,32 @@ public class RoutePlanningServiceImpl implements RoutePlanningService {
                 POI fromPoi = pois.get(i);
                 POI toPoi = pois.get(i + 1);
 
-                // Google JSON 中的 distance
-                long distanceMeters = legJson
-                        .get("distance")
-                        .get("value")
-                        .asLong();
+                // 距离（米）
+                long distanceMeters = legJson.path("distanceMeters").asLong(0);
 
-                String distanceText = legJson
-                        .get("distance")
-                        .get("text")
-                        .asText();
+                // 时间：Routes API 返回的是 "572s" 这种字符串，需要转换为秒数
+                long durationSeconds = parseDurationSeconds(legJson.path("duration").asText(""));
 
-                // Google JSON 中的 duration
-                long durationSeconds = legJson
-                        .get("duration")
-                        .get("value")
-                        .asLong();
+                // 显示文本（如 "1.8 km" / "10 mins"）
+                JsonNode localized = legJson.path("localizedValues");
+                String distanceText = localized.path("distance").path("text")
+                        .asText(String.format("%.1f km", distanceMeters / 1000.0));
+                String durationText = localized.path("duration").path("text")
+                        .asText(Math.round(durationSeconds / 60.0) + " mins");
 
-                String durationText = legJson
-                        .get("duration")
-                        .get("text")
-                        .asText();
-
-                // 使用 Google 官方 SDK 提取该 leg 的独立完整折线
-                String legPolyline = "";
-                if (legJson.has("polyline") && legJson.get("polyline").has("points")) {
-                    legPolyline = legJson.get("polyline").get("points").asText("");
-                } else if (legJson.has("steps") && legJson.get("steps").isArray()) {
-                    List<LatLng> legPoints = new ArrayList<>();
-                    for (JsonNode stepNode : legJson.get("steps")) {
-                        if (stepNode.has("polyline") && stepNode.get("polyline").has("points")) {
-                            String stepPoints = stepNode.get("polyline").get("points").asText("");
-                            if (!stepPoints.isEmpty()) {
-                                legPoints.addAll(PolylineEncoding.decode(stepPoints));
-                            }
-                        }
-                    }
-                    if (!legPoints.isEmpty()) {
-                        legPolyline = PolylineEncoding.encode(legPoints);
-                    }
-                }
+                // 这一段 leg 的折线（Routes API 直接提供，无需再拼接 steps）
+                String legPolyline = legJson.path("polyline").path("encodedPolyline").asText("");
 
                 // 创建 RouteLegDto
                 RouteLegDto leg = new RouteLegDto();
 
                 leg.setFromPoiId(fromPoi.getId());
                 leg.setFromPoiName(fromPoi.getName());
-                if (fromPoi.getLatitude() != null && fromPoi.getLongitude() != null) {
-                    leg.setFromLocation(new LocationDto(fromPoi.getLatitude(), fromPoi.getLongitude()));
-                }
+                leg.setFromLocation(new LocationDto(fromPoi.getLatitude(), fromPoi.getLongitude()));
 
                 leg.setToPoiId(toPoi.getId());
                 leg.setToPoiName(toPoi.getName());
-                if (toPoi.getLatitude() != null && toPoi.getLongitude() != null) {
-                    leg.setToLocation(new LocationDto(toPoi.getLatitude(), toPoi.getLongitude()));
-                }
+                leg.setToLocation(new LocationDto(toPoi.getLatitude(), toPoi.getLongitude()));
 
                 leg.setDistanceMeters(distanceMeters);
                 leg.setDistanceText(distanceText);
@@ -210,7 +189,60 @@ public class RoutePlanningServiceImpl implements RoutePlanningService {
             return response;
 
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse Google Directions response", e);
+            throw new RuntimeException("Failed to parse Google Routes API response", e);
+        }
+    }
+
+    /**
+     * 构建 Routes API 请求体：
+     * {
+     *   "origin": {...}, "destination": {...}, "intermediates": [...],
+     *   "travelMode": "DRIVE", "polylineEncoding": "ENCODED_POLYLINE", ...
+     * }
+     */
+    private Map<String, Object> buildRequestBody(List<POI> pois) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("origin", toWaypoint(pois.get(0)));
+        body.put("destination", toWaypoint(pois.get(pois.size() - 1)));
+
+        List<Map<String, Object>> intermediates = new ArrayList<>();
+        for (int i = 1; i < pois.size() - 1; i++) {
+            intermediates.add(toWaypoint(pois.get(i)));
+        }
+        if (!intermediates.isEmpty()) {
+            body.put("intermediates", intermediates);
+        }
+
+        body.put("travelMode", "DRIVE");
+        body.put("polylineEncoding", "ENCODED_POLYLINE");
+        body.put("languageCode", "en-US");
+        body.put("units", "METRIC");
+        return body;
+    }
+
+    /**
+     * POI -> Routes API 的 Waypoint 格式：{"location": {"latLng": {"latitude": .., "longitude": ..}}}
+     */
+    private Map<String, Object> toWaypoint(POI poi) {
+        Map<String, Object> latLng = new LinkedHashMap<>();
+        latLng.put("latitude", poi.getLatitude());
+        latLng.put("longitude", poi.getLongitude());
+        return Map.of("location", Map.of("latLng", latLng));
+    }
+
+    /**
+     * 将 Routes API 的 duration 字符串（如 "572s"）解析为秒数
+     */
+    private long parseDurationSeconds(String duration) {
+        if (duration == null || duration.isBlank()) {
+            return 0L;
+        }
+        String numeric = duration.endsWith("s") ? duration.substring(0, duration.length() - 1) : duration;
+        try {
+            return Math.round(Double.parseDouble(numeric));
+        } catch (NumberFormatException e) {
+            log.warn("无法解析 Routes API duration: {}", duration);
+            return 0L;
         }
     }
 
