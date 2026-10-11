@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LngLatBounds, Map as MapLibreMap, Marker, Popup } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { decodePolyline } from './decodePolyline';
+import { createRouteAnimation } from './routeAnimation';
 import './TripRouteMap.css';
 
 const SHANGHAI_CENTER = [121.4737, 31.2304];
@@ -83,7 +84,7 @@ function routeFeatures(day) {
   }
 }
 
-function highlightRoute(map, active) {
+function highlightRoute(map, active, animationVisible = false) {
   if (!map.getLayer(LAYER_ID)) return;
   const key = activeLegKey(active);
   map.setPaintProperty(LAYER_ID, 'line-color', [
@@ -92,6 +93,9 @@ function highlightRoute(map, active) {
   map.setPaintProperty(LAYER_ID, 'line-width', [
     'case', ['==', ['get', 'key'], key], 8, 5,
   ]);
+  map.setPaintProperty(LAYER_ID, 'line-opacity', [
+    'case', ['==', ['get', 'key'], key], 0.95, animationVisible ? 0.3 : 0.85,
+  ]);
 }
 
 export default function TripRouteMap({ day, active, onSelect }) {
@@ -99,13 +103,27 @@ export default function TripRouteMap({ day, active, onSelect }) {
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const routeClickRef = useRef(null);
+  const animationControllerRef = useRef(null);
+  const animationSnapshotRef = useRef({ progress: 0, playing: false });
+  const animationVisibleRef = useRef(false);
   const latestRef = useRef({ day, active, onSelect });
   const modeRef = useRef('2d');
+  const inFlightModeRef = useRef('2d');
+  const styleLoadingRef = useRef(true);
   const [mode, setMode] = useState('2d');
+  const [styleLoading, setStyleLoading] = useState(true);
+  const [animationAvailable, setAnimationAvailable] = useState(false);
+  const [animationPlaying, setAnimationPlaying] = useState(false);
   const [error, setError] = useState('');
   latestRef.current = { day, active, onSelect };
 
-  const clearTravel = useCallback((map) => {
+  const clearTravel = useCallback((map, updateControls = true) => {
+    animationControllerRef.current?.destroy();
+    animationControllerRef.current = null;
+    if (updateControls) {
+      setAnimationAvailable(false);
+      setAnimationPlaying(false);
+    }
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
     if (routeClickRef.current && map.getLayer(LAYER_ID)) {
@@ -116,7 +134,7 @@ export default function TripRouteMap({ day, active, onSelect }) {
     if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
   }, []);
 
-  const draw = useCallback((map) => {
+  const draw = useCallback((map, animationSnapshot = { progress: 0, playing: false }) => {
     clearTravel(map);
     const current = latestRef.current;
     const items = (current.day?.planItems ?? []).filter(validPoint);
@@ -162,7 +180,21 @@ export default function TripRouteMap({ day, active, onSelect }) {
         if (from && to) latestRef.current.onSelect({ type: 'travel', fromPlanItemId: Number(from), toPlanItemId: Number(to) });
       };
       map.on('click', LAYER_ID, routeClickRef.current);
-      highlightRoute(map, current.active);
+      const updateAnimationAppearance = (snapshot) => {
+        if (mapRef.current !== map || animationControllerRef.current == null) return;
+        animationSnapshotRef.current = snapshot;
+        animationVisibleRef.current = snapshot.playing || snapshot.progress > 0;
+        setAnimationPlaying(snapshot.playing);
+        highlightRoute(map, latestRef.current.active, animationVisibleRef.current);
+      };
+      animationControllerRef.current = createRouteAnimation(map, current.day?.route, {
+        beforeLayerId: LAYER_ID,
+        initialProgress: animationSnapshot.progress,
+        onChange: updateAnimationAppearance,
+      });
+      setAnimationAvailable(animationControllerRef.current != null);
+      animationVisibleRef.current = animationControllerRef.current != null && animationSnapshot.progress > 0;
+      highlightRoute(map, current.active, animationVisibleRef.current);
     }
 
     if (items.length === 1) {
@@ -184,18 +216,49 @@ export default function TripRouteMap({ day, active, onSelect }) {
         zoom: 10,
       });
       mapRef.current = map;
-      map.on('error', () => setError('地图底图加载失败，请检查网络连接。'));
+      map.on('error', (event) => {
+        if (!styleLoadingRef.current || event?.sourceId || event?.tile) return;
+        if (modeRef.current === '3d') {
+          modeRef.current = '2d';
+          inFlightModeRef.current = '2d';
+          setMode('2d');
+          setError('3D 地图加载失败，已回退到 2D 地图。');
+          try {
+            map.setStyle(RASTER_STYLE);
+          } catch {
+            styleLoadingRef.current = false;
+            setStyleLoading(false);
+          }
+          return;
+        }
+        styleLoadingRef.current = false;
+        setStyleLoading(false);
+        setError('地图样式加载失败，请重试。');
+      });
       map.on('style.load', () => {
+        const loadedMode = inFlightModeRef.current;
+        if (modeRef.current !== loadedMode) {
+          inFlightModeRef.current = modeRef.current;
+          map.setStyle(modeRef.current === '3d' ? VECTOR_STYLE : RASTER_STYLE);
+          return;
+        }
+        styleLoadingRef.current = false;
+        setStyleLoading(false);
         setError('');
         if (modeRef.current === '3d') add3DBuildings(map);
-        draw(map);
+        draw(map, animationSnapshotRef.current);
+        map.easeTo({
+          pitch: modeRef.current === '3d' ? 60 : 0,
+          bearing: modeRef.current === '3d' ? -20 : 0,
+          duration: 500,
+        });
       });
     } catch {
       setError('无法初始化地图，请检查浏览器是否支持 WebGL。');
     }
     return () => {
       if (map) {
-        clearTravel(map);
+        clearTravel(map, false);
         map.remove();
       }
       mapRef.current = null;
@@ -203,14 +266,16 @@ export default function TripRouteMap({ day, active, onSelect }) {
   }, [clearTravel, draw]);
 
   useEffect(() => {
+    animationSnapshotRef.current = { progress: 0, playing: false };
+    animationVisibleRef.current = false;
     const map = mapRef.current;
-    if (map?.isStyleLoaded()) draw(map);
+    if (map?.isStyleLoaded() && !styleLoadingRef.current) draw(map, animationSnapshotRef.current);
   }, [day, draw]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map?.isStyleLoaded()) return;
-    highlightRoute(map, active);
+    highlightRoute(map, active, animationVisibleRef.current);
     markersRef.current.forEach((marker) => {
       marker.getElement().classList.toggle(
         'is-active', active?.type === 'poi' && Number(marker.getElement().dataset.planItemId) === active.id,
@@ -237,11 +302,34 @@ export default function TripRouteMap({ day, active, onSelect }) {
   const switchMode = (next) => {
     const map = mapRef.current;
     if (!map || next === mode) return;
-    clearTravel(map);
     modeRef.current = next;
     setMode(next);
-    map.setStyle(next === '3d' ? VECTOR_STYLE : RASTER_STYLE);
-    map.easeTo({ pitch: next === '3d' ? 60 : 0, bearing: next === '3d' ? -20 : 0, duration: 500 });
+    if (!styleLoadingRef.current) {
+      const snapshot = animationControllerRef.current?.pause() ?? animationSnapshotRef.current;
+      animationSnapshotRef.current = { ...snapshot, playing: false };
+      clearTravel(map);
+      styleLoadingRef.current = true;
+      setStyleLoading(true);
+      inFlightModeRef.current = next;
+      map.setStyle(next === '3d' ? VECTOR_STYLE : RASTER_STYLE);
+    }
+  };
+
+  const retryStyle = () => {
+    const map = mapRef.current;
+    if (!map || styleLoadingRef.current) return;
+    clearTravel(map);
+    styleLoadingRef.current = true;
+    setStyleLoading(true);
+    setError('');
+    inFlightModeRef.current = modeRef.current;
+    try {
+      map.setStyle(modeRef.current === '3d' ? VECTOR_STYLE : RASTER_STYLE);
+    } catch {
+      styleLoadingRef.current = false;
+      setStyleLoading(false);
+      setError('地图样式加载失败，请重试。');
+    }
   };
 
   return (
@@ -250,8 +338,13 @@ export default function TripRouteMap({ day, active, onSelect }) {
         <button type="button" className={mode === '2d' ? 'is-active' : ''} onClick={() => switchMode('2d')}>2D</button>
         <button type="button" className={mode === '3d' ? 'is-active' : ''} onClick={() => switchMode('3d')}>3D</button>
       </div>
+      <div className="tp-trip-map-animation" aria-label="路线动画控制">
+        <button type="button" disabled={!animationAvailable || styleLoading || animationPlaying} onClick={() => animationControllerRef.current?.play()}>Play</button>
+        <button type="button" disabled={!animationAvailable || styleLoading || !animationPlaying} onClick={() => animationControllerRef.current?.pause()}>Pause</button>
+        <button type="button" disabled={!animationAvailable || styleLoading} onClick={() => animationControllerRef.current?.restart()}>Restart</button>
+      </div>
       <div ref={containerRef} className="tp-trip-map-canvas" role="region" aria-label="行程路线地图" />
-      {error && <p className="tp-trip-map-error" role="alert">{error}</p>}
+      {error && <p className="tp-trip-map-error" role="alert">{error} {!styleLoading && <button type="button" onClick={retryStyle}>重试</button>}</p>}
     </div>
   );
 }

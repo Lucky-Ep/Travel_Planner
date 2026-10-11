@@ -108,7 +108,9 @@ export default function SearchMapView({ pois, activePoiId, onPoiActivate }) {
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const latestPropsRef = useRef({ pois, activePoiId, onPoiActivate });
-  const styleRequestRef = useRef(0);
+  const desiredModeRef = useRef('2d');
+  const inFlightModeRef = useRef('2d');
+  const styleLoadingRef = useRef(true);
   const [mode, setMode] = useState('2d');
   const [error, setError] = useState('');
 
@@ -124,17 +126,45 @@ export default function SearchMapView({ pois, activePoiId, onPoiActivate }) {
         zoom: 10,
       });
       mapRef.current = map;
-      map.on('error', () => {
-        setError('地图底图加载失败，请检查网络连接。');
+      map.on('error', (event) => {
+        if (!styleLoadingRef.current || event?.sourceId || event?.tile) return;
+        if (desiredModeRef.current === '3d') {
+          desiredModeRef.current = '2d';
+          inFlightModeRef.current = '2d';
+          setMode('2d');
+          setError('3D 地图加载失败，已回退到 2D 地图。');
+          try {
+            map.setStyle(RASTER_STYLE);
+          } catch {
+            styleLoadingRef.current = false;
+          }
+          return;
+        }
+        styleLoadingRef.current = false;
+        setError('地图样式加载失败，请重试。');
       });
-      map.on('style.load', () => setError(''));
-      map.on('load', () => syncMarkers(map, markersRef, latestPropsRef.current));
+      map.on('style.load', () => {
+        const loadedMode = inFlightModeRef.current;
+        if (desiredModeRef.current !== loadedMode) {
+          inFlightModeRef.current = desiredModeRef.current;
+          map.setStyle(desiredModeRef.current === '3d' ? VECTOR_STYLE : RASTER_STYLE);
+          return;
+        }
+        styleLoadingRef.current = false;
+        setError('');
+        if (desiredModeRef.current === '3d') add3DBuildings(map);
+        syncMarkers(map, markersRef, latestPropsRef.current);
+        map.easeTo({
+          pitch: desiredModeRef.current === '3d' ? 60 : 0,
+          bearing: desiredModeRef.current === '3d' ? -20 : 0,
+          duration: 600,
+        });
+      });
     } catch {
       setError('无法初始化地图，请检查浏览器是否支持 WebGL。');
     }
 
     return () => {
-      styleRequestRef.current += 1;
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       map?.remove();
@@ -144,7 +174,7 @@ export default function SearchMapView({ pois, activePoiId, onPoiActivate }) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (map?.isStyleLoaded()) {
+    if (map?.isStyleLoaded() && !styleLoadingRef.current) {
       syncMarkers(map, markersRef, { pois, activePoiId, onPoiActivate });
     }
   }, [pois, activePoiId, onPoiActivate]);
@@ -152,22 +182,30 @@ export default function SearchMapView({ pois, activePoiId, onPoiActivate }) {
   const switchMode = (nextMode) => {
     const map = mapRef.current;
     if (!map || nextMode === mode) return;
+    desiredModeRef.current = nextMode;
     setMode(nextMode);
+    if (styleLoadingRef.current) return;
     markersRef.current.forEach((marker) => marker.remove());
     markersRef.current = [];
-    const requestId = ++styleRequestRef.current;
-
-    map.once('style.load', () => {
-      if (requestId !== styleRequestRef.current || mapRef.current !== map) return;
-      if (nextMode === '3d') add3DBuildings(map);
-      syncMarkers(map, markersRef, latestPropsRef.current);
-      map.easeTo({
-        pitch: nextMode === '3d' ? 60 : 0,
-        bearing: nextMode === '3d' ? -20 : 0,
-        duration: 600,
-      });
-    });
+    styleLoadingRef.current = true;
+    inFlightModeRef.current = nextMode;
     map.setStyle(nextMode === '3d' ? VECTOR_STYLE : RASTER_STYLE);
+  };
+
+  const retryStyle = () => {
+    const map = mapRef.current;
+    if (!map || styleLoadingRef.current) return;
+    markersRef.current.forEach((marker) => marker.remove());
+    markersRef.current = [];
+    styleLoadingRef.current = true;
+    setError('');
+    inFlightModeRef.current = desiredModeRef.current;
+    try {
+      map.setStyle(desiredModeRef.current === '3d' ? VECTOR_STYLE : RASTER_STYLE);
+    } catch {
+      styleLoadingRef.current = false;
+      setError('地图样式加载失败，请重试。');
+    }
   };
 
   return (
@@ -177,7 +215,7 @@ export default function SearchMapView({ pois, activePoiId, onPoiActivate }) {
         <button type="button" className={mode === '3d' ? 'is-active' : ''} onClick={() => switchMode('3d')}>3D</button>
       </div>
       <div ref={containerRef} className="tp-search-map-canvas" role="region" aria-label="上海景点地图" />
-      {error && <p className="tp-search-map-error" role="alert">{error}</p>}
+      {error && <p className="tp-search-map-error" role="alert">{error} {!styleLoadingRef.current && <button type="button" onClick={retryStyle}>重试</button>}</p>}
     </div>
   );
 }
