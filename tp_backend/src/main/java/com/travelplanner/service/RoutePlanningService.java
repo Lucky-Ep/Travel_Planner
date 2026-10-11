@@ -5,10 +5,12 @@ import com.travelplanner.dto.route.RouteLegDto;
 import com.travelplanner.dto.route.RouteResponseDto;
 import com.travelplanner.entity.POI;
 import com.travelplanner.entity.PlanItem;
+import com.travelplanner.exception.ResourceNotFoundException;
 import com.travelplanner.exception.RouteUnavailableException;
 import com.travelplanner.repository.PlanItemRepository;
 import com.travelplanner.repository.TripDayRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
@@ -16,18 +18,25 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.net.URI;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class RoutePlanningService {
     private static final Duration CACHE_AGE = Duration.ofMinutes(20);
+    private static final URI ROUTES_API_URI = URI.create("https://routes.googleapis.com/directions/v2:computeRoutes");
+    private static final String FIELD_MASK = String.join(",",
+            "routes.legs.distanceMeters",
+            "routes.legs.duration",
+            "routes.legs.polyline.encodedPolyline",
+            "routes.legs.localizedValues",
+            "routes.polyline.encodedPolyline");
     private final PlanItemRepository planItems;
     private final TripDayRepository days;
     private final RestClient client;
@@ -48,7 +57,7 @@ public class RoutePlanningService {
 
     public RouteResponseDto planRouteForDay(Long dayId) {
         if (!days.existsById(dayId)) {
-            throw new com.travelplanner.exception.ResourceNotFoundException("Trip day not found with id: " + dayId);
+            throw new ResourceNotFoundException("Trip day not found with id: " + dayId);
         }
         List<PlanItem> valid = planItems.findByTripDayIdOrderByVisitOrderAsc(dayId).stream()
                 .filter(item -> item.getPoi() != null
@@ -76,7 +85,14 @@ public class RoutePlanningService {
         }
 
         try {
-            String json = client.get().uri(buildUri(valid)).retrieve().body(String.class);
+            String json = client.post()
+                    .uri(ROUTES_API_URI)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header("X-Goog-Api-Key", apiKey)
+                    .header("X-Goog-FieldMask", FIELD_MASK)
+                    .body(mapper.writeValueAsString(buildRequestBody(valid)))
+                    .retrieve()
+                    .body(String.class);
             RouteResponseDto response = parse(dayId, valid, json);
             if (cache.size() >= 256) {
                 cache.clear();
@@ -96,43 +112,45 @@ public class RoutePlanningService {
                 .toList();
     }
 
-    private URI buildUri(List<PlanItem> items) {
-        StringBuilder url = new StringBuilder("https://maps.googleapis.com/maps/api/directions/json?origin=")
-                .append(encode(coordinates(items.get(0).getPoi())))
-                .append("&destination=")
-                .append(encode(coordinates(items.get(items.size() - 1).getPoi())));
+    private Map<String, Object> buildRequestBody(List<PlanItem> items) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("origin", waypoint(items.get(0).getPoi()));
+        body.put("destination", waypoint(items.get(items.size() - 1).getPoi()));
         if (items.size() > 2) {
-            List<String> waypoints = new ArrayList<>();
+            List<Map<String, Object>> intermediates = new ArrayList<>();
             for (int i = 1; i < items.size() - 1; i++) {
-                waypoints.add(coordinates(items.get(i).getPoi()));
+                intermediates.add(waypoint(items.get(i).getPoi()));
             }
-            url.append("&waypoints=").append(encode(String.join("|", waypoints)));
+            body.put("intermediates", intermediates);
         }
-        url.append("&mode=driving&key=").append(encode(apiKey));
-        return URI.create(url.toString());
+        body.put("travelMode", "DRIVE");
+        body.put("polylineEncoding", "ENCODED_POLYLINE");
+        body.put("languageCode", "zh-CN");
+        body.put("units", "METRIC");
+        return body;
     }
 
-    private String coordinates(POI poi) {
-        return poi.getLatitude() + "," + poi.getLongitude();
-    }
-
-    private String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
+    private Map<String, Object> waypoint(POI poi) {
+        return Map.of("location", Map.of("latLng", Map.of(
+                "latitude", poi.getLatitude(),
+                "longitude", poi.getLongitude())));
     }
 
     private RouteResponseDto parse(Long dayId, List<PlanItem> items, String json) {
         JsonNode root = mapper.readTree(json);
-        String status = root.get("status") == null ? "UNKNOWN" : root.get("status").asText();
-        JsonNode routes = root.get("routes");
-        if (!"OK".equals(status) || routes == null || routes.isEmpty()) {
-            throw new RouteUnavailableException("Google Directions returned " + status);
+        JsonNode routes = root.path("routes");
+        if (!routes.isArray() || routes.isEmpty()) {
+            throw new RouteUnavailableException("Google Routes returned no route for planned POIs");
         }
         JsonNode firstRoute = routes.get(0);
-        JsonNode routeLegs = firstRoute.get("legs");
-        if (routeLegs == null || routeLegs.size() != items.size() - 1) {
+        JsonNode routeLegs = firstRoute.path("legs");
+        if (!routeLegs.isArray() || routeLegs.size() != items.size() - 1) {
             throw new RouteUnavailableException("Route leg count does not match planned POIs");
         }
-        String overview = firstRoute.get("overview_polyline").get("points").asText();
+        String overview = firstRoute.path("polyline").path("encodedPolyline").asText("");
+        if (overview.isBlank()) {
+            throw new RouteUnavailableException("Google Routes returned no route polyline");
+        }
         List<RouteLegDto> legs = new ArrayList<>();
         long distance = 0;
         long duration = 0;
@@ -140,16 +158,24 @@ public class RoutePlanningService {
             JsonNode leg = routeLegs.get(i);
             PlanItem from = items.get(i);
             PlanItem to = items.get(i + 1);
-            long legDistance = leg.get("distance").get("value").asLong();
-            long legDuration = leg.get("duration").get("value").asLong();
+            long legDistance = leg.path("distanceMeters").asLong(-1);
+            long legDuration = durationSeconds(leg.path("duration").asText(""));
+            if (legDistance < 0 || legDuration < 0) {
+                throw new RouteUnavailableException("Google Routes returned incomplete route details");
+            }
+            JsonNode localized = leg.path("localizedValues");
+            String distanceText = localized.path("distance").path("text")
+                    .asText(String.format(Locale.ROOT, "%.1f km", legDistance / 1000.0));
+            String durationText = localized.path("duration").path("text")
+                    .asText(Math.round(legDuration / 60.0) + " min");
             legs.add(new RouteLegDto(
                     from.getId(), from.getPoi().getId(), from.getPoi().getName(),
                     new LocationDto(from.getPoi().getLatitude(), from.getPoi().getLongitude()),
                     to.getId(), to.getPoi().getId(), to.getPoi().getName(),
                     new LocationDto(to.getPoi().getLatitude(), to.getPoi().getLongitude()),
-                    legDistance, leg.get("distance").get("text").asText(),
-                    legDuration, leg.get("duration").get("text").asText(),
-                    legPolyline(leg)
+                    legDistance, distanceText,
+                    legDuration, durationText,
+                    leg.path("polyline").path("encodedPolyline").asText("")
             ));
             distance += legDistance;
             duration += legDuration;
@@ -157,29 +183,15 @@ public class RoutePlanningService {
         return new RouteResponseDto(dayId, distance, duration, overview, legs);
     }
 
-    private String legPolyline(JsonNode leg) {
-        JsonNode direct = leg.get("polyline");
-        if (direct != null && direct.get("points") != null) {
-            return direct.get("points").asText();
+    private long durationSeconds(String value) {
+        if (!value.endsWith("s")) {
+            return -1;
         }
-        List<int[]> points = new ArrayList<>();
-        JsonNode steps = leg.get("steps");
-        if (steps != null) {
-            for (JsonNode step : steps) {
-                JsonNode polyline = step.get("polyline");
-                if (polyline == null || polyline.get("points") == null) continue;
-                String encoded = polyline.get("points").asText();
-                if (encoded.isBlank()) continue;
-                List<int[]> decoded = PolylineCodec.decode(encoded);
-                if (!points.isEmpty() && !decoded.isEmpty()
-                        && points.get(points.size() - 1)[0] == decoded.get(0)[0]
-                        && points.get(points.size() - 1)[1] == decoded.get(0)[1]) {
-                    decoded.remove(0);
-                }
-                points.addAll(decoded);
-            }
+        try {
+            return Math.round(Double.parseDouble(value.substring(0, value.length() - 1)));
+        } catch (NumberFormatException exception) {
+            return -1;
         }
-        return points.isEmpty() ? "" : PolylineCodec.encode(points);
     }
 
     private record CachedRoute(Instant createdAt, RouteResponseDto response) {

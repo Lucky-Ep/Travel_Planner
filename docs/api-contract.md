@@ -46,7 +46,8 @@ duration**, not an actual departure or arrival clock time. The routing mode is
 currently fixed to `driving`; visits are never automatically reordered.
 
 Encoded polylines decode as `(lat, lng)`; MapLibre coordinates must be
-`[lng, lat]`. The route service requires `GOOGLE_MAPS_API_KEY` for real
+`[lng, lat]`. Route calculation uses Google Routes API (`computeRoutes`) and
+requires `GOOGLE_MAPS_API_KEY` for real
 requests. A standalone route request returns 503 if routing is unavailable;
 the overview endpoint returns the partial itinerary instead.
 
